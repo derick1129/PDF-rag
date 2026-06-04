@@ -1,65 +1,159 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+
+interface Document {
+  id: string
+  filename: string
+  uploadedAt: string
+  chats: { id: string }[]
+}
+
+export default function HomePage() {
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [deleting, setDeleting]   = useState<string | null>(null)
+  const [error, setError]         = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchDocuments()
+  }, [])
+
+  async function fetchDocuments() {
+    try {
+      setError(null)
+      const res = await fetch('/api/documents')
+      if (!res.ok) throw new Error('Failed to load documents.')
+      const data = await res.json()
+      setDocuments(data.documents)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDelete(id: string, filename: string) {
+    if (!confirm(`Delete "${filename}"? This will also remove all its chats.`)) return
+    setDeleting(id)
+    try {
+      const res = await fetch(`/api/documents?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Delete failed.')
+      setDocuments(prev => prev.filter(d => d.id !== id))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Delete failed.')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+    })
+  }
+
+  // ── Loading ──────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <main className="container">
+        <div className="list-grid">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="card" style={{ height: 72, animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.15}s` }} />
+          ))}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+      </main>
+    )
+  }
+
+  // ── Error ────────────────────────────────────────────────────────────────
+  if (error) {
+    return (
+      <main className="container">
+        <div className="alert">
+          <span style={{ fontSize: 18 }}>⚠</span>
+          <span>{error}</span>
+          <button onClick={fetchDocuments} className="button-secondary">Retry</button>
         </div>
       </main>
-    </div>
-  );
+    )
+  }
+
+  // ── Main ─────────────────────────────────────────────────────────────────
+  return (
+    <main className="container">
+      <div className="panel" style={{ padding: 28 }}>
+        <div className="header">
+          <div className="title-group">
+            <h1>PDF Chatbot</h1>
+            <p>
+              {documents.length === 0
+                ? 'No documents yet'
+                : `${documents.length} document${documents.length === 1 ? '' : 's'}`}
+            </p>
+          </div>
+          <Link href="/upload" className="button-primary">
+            + Upload PDF
+          </Link>
+        </div>
+
+      {/* Empty state */}
+      {documents.length === 0 && (
+        <div className="empty-state section card">
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
+          <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--text-muted)' }}>Upload a PDF to start chatting with it.</p>
+          <Link href="/upload" className="button-primary">
+            Upload your first PDF
+          </Link>
+        </div>
+      )}
+
+      {/* Document list */}
+      {documents.length > 0 && (
+        <div className="section list-grid">
+          {documents.map(doc => {
+            const chatId = doc.chats[0]?.id
+            const isDeleting = deleting === doc.id
+
+            return (
+              <div key={doc.id} className="list-item" style={{ opacity: isDeleting ? 0.5 : 1 }}>
+
+                <div className="icon-box">📄</div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p className="document-title">{doc.filename}</p>
+                  <p className="document-meta">{formatDate(doc.uploadedAt)}</p>
+                </div>
+
+                <div className="action-row">
+                  {chatId ? (
+                    <Link href={`/chat/${chatId}`} className="button-secondary" style={{ padding: '8px 16px' }}>
+                      Chat
+                    </Link>
+                  ) : (
+                    <span className="button-secondary" style={{ padding: '8px 16px' }}>
+                      No chat
+                    </span>
+                  )}
+
+                  <button
+                    onClick={() => handleDelete(doc.id, doc.filename)}
+                    disabled={isDeleting}
+                    className="button-secondary"
+                    style={{ padding: '8px 14px' }}
+                    title="Delete document"
+                  >
+                    {isDeleting ? '…' : '🗑'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      </div>
+    </main>
+  )
 }
